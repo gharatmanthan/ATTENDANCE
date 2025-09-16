@@ -34,12 +34,18 @@
                         if (!isNaN(total) && !isNaN(attended) && total > 0) {
                             let canSkip = 0;
                             let needed = 0;
-                            if ((attended / total) >= 0.75) {
-                                canSkip = Math.floor(attended / 0.75) - total;
-                            } else {
+                            const currentPercentage = attended / total;
+
+                            if (currentPercentage >= 0.75) {
                                 const requiredFor75 = Math.ceil(0.75 * total);
-                                needed = requiredFor75 > attended ? requiredFor75 - attended : 0;
+                                canSkip = attended - requiredFor75;
+                                needed = 0;
+                            } else {
+                                canSkip = 0;
+                                // Predictive formula: How many future lectures must be attended to reach 75%
+                                needed = Math.ceil(3 * total - 4 * attended);
                             }
+
                             const finalSubjectName = isPracticalTable ? `${subjectName} (Practical)` : subjectName;
                             attendanceData.push({ subjectName: finalSubjectName, total, attended, attendance, canSkip, needed });
                         }
@@ -53,7 +59,6 @@
             const subjectData = {};
             let table = null;
             document.querySelectorAll('table').forEach(t => {
-                // Use lowercase for robust header matching
                 const headers = [...t.querySelectorAll('th')].map(th => th.innerText.trim().toLowerCase());
                 if (headers.includes("date") && headers.includes("slot 1")) {
                     table = t;
@@ -83,42 +88,40 @@
                         const cell = cells[i];
                         const cellText = cell.innerText.trim();
                         if (cellText && cellText !== '::') {
-                            const subjectParts = cellText.split(':');
-                            if (subjectParts.length > 1) {
-                                const teacher = subjectParts[0].trim();
-                                const subjectCode = subjectParts[1].trim();
-                                const subjectName = `${teacher}:${subjectCode}`;
+                            // Use the full text (e.g., "Rashmi:CSS:.T") as the unique key.
+                            // This correctly separates Theory (.T) from Practicals (.P1).
+                            const subjectName = cellText;
 
-                                if (!subjectData[subjectName]) {
-                                    subjectData[subjectName] = { total: 0, attended: 0 };
-                                }
-                                subjectData[subjectName].total += 1;
-                                const style = cell.getAttribute('style');
-                                // Check for red background color to mark as missed
-                                if (!style || !style.toLowerCase().includes('background-color')) {
-                                    subjectData[subjectName].attended += 1;
-                                }
+                            if (!subjectData[subjectName]) {
+                                subjectData[subjectName] = { total: 0, attended: 0 };
+                            }
+                            subjectData[subjectName].total += 1;
+                            const style = cell.getAttribute('style');
+                            // Check for red background color to mark as missed
+                            if (!style || !style.toLowerCase().includes('background-color')) {
+                                subjectData[subjectName].attended += 1;
                             }
                         }
                     }
                 }
             });
 
-            // Calculate percentage, skippable lectures, and needed lectures
+            // Calculate percentage, skippable lectures, and needed lectures for each subject.
             for (const subjectName in subjectData) {
                 const data = subjectData[subjectName];
                 data.percentage = data.total > 0 ? (data.attended / data.total) * 100 : 0;
                 
-                let canSkip = 0;
-                let needed = 0;
-                if (data.percentage >= 75) {
-                    canSkip = Math.floor(data.attended / 0.75) - data.total;
-                } else {
+                const currentPercentage = data.total > 0 ? data.attended / data.total : 0;
+
+                if (currentPercentage >= 0.75) {
                     const requiredFor75 = Math.ceil(0.75 * data.total);
-                    needed = requiredFor75 > data.attended ? requiredFor75 - data.attended : 0;
+                    data.canSkip = data.attended - requiredFor75;
+                    data.needed = 0;
+                } else {
+                    data.canSkip = 0;
+                    // Predictive formula: How many future lectures must be attended to reach 75%
+                    data.needed = Math.ceil(3 * data.total - 4 * data.attended);
                 }
-                data.canSkip = canSkip;
-                data.needed = needed;
             }
 
             return subjectData;
